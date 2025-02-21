@@ -1,78 +1,65 @@
 import numpy as np
-import matplotlib.pyplot as plt
-from scipy.integrate import quad
-import math
+import scipy.integrate as spi
 
 
-def approximate_function(f, T0, N):
+def compute_Ck(x_t, T0, T1, k):
     """
-    用傅里叶级数逼近函数 f(x)
+    计算连续时间傅里叶级数 (CTFS) 系数 C_k
 
-    参数:
-    - f: 目标函数，f(x)
-    - T0: 周期
-    - N: 傅里叶级数的最高阶数
+    参数：
+    - x_t: 目标函数 (lambda function)
+    - T0, T1: 积分区间
+    - k: 计算的谐波索引
 
-    返回:
-    - approx: 用傅里叶级数表示的逼近函数
+    返回：
+    - C_k: 计算的傅里叶级数系数
     """
-    omega0 = 2 * np.pi / T0  # 基本角频率
+    T = T1 - T0  # 计算周期
+    omega_0 = 2 * np.pi / T  # 计算基频
 
-    # 计算傅里叶系数 c_k
-    def compute_ck(k):
-        def integrand(t):
-            return f(t) * np.exp(-1j * k * omega0 * t)
+    # 被积函数
+    integrand = lambda t: x_t(t) * np.exp(-1j * k * omega_0 * t)
 
-        integral, _ = quad(integrand, 0, T0)  # 使用数值积分计算
-        return integral / T0
+    # 计算积分
+    C_k, _ = spi.quad(lambda t: integrand(t).real, T0, T1)  # 仅计算实部
+    C_k_imag, _ = spi.quad(lambda t: integrand(t).imag, T0, T1)  # 计算虚部
 
-    # 储存傅里叶系数
-    coefficients = [compute_ck(k) for k in range(-N, N + 1)]
+    C_k = (C_k + 1j * C_k_imag) / T  # 归一化
 
-    # 构造逼近函数
-    def approx(t):
-        result = 0
-        for k, ck in zip(range(-N, N + 1), coefficients):
-            result += ck * np.exp(1j * k * omega0 * t)
-        return np.real(result)  # 取实部作为结果
-
-    # 返回逼近函数和系数
-    return approx, coefficients
+    return C_k
 
 
-# 示例: 目标函数
-# def target_function(x):
-#     return np.abs(np.sin(x))  # 示例函数: |sin(x)|
+if __name__ == '__main__':
+    # 定义 x(t) 方波信号
+    # x_t = lambda t: 1 if 0 <= t < 1 else -1
+    def x_t(t):
+        if t < -1:
+            return -t - 2
+        if t < 1:
+            return t
+        return -t + 2
 
-def target_function(x):
-    """
-    方波函数
-    """
-    # 取 x mod 2π
-    x_mod = x % (2 * math.pi)
-    if x_mod < math.pi:
-        return 1
-    else:
-        return -1
+    # 计算 C_k, k=1
+    C_1 = compute_Ck(x_t, -2, 2, 1)
+    print(f"C_1 = {C_1}")
 
-# 参数设置
-T0 = 2 * np.pi  # 周期
-N = 5  # 傅里叶级数最高阶数
+    # 绘制 C_k 随 k 的变化
+    k_values = np.arange(-10, 11)
+    C_values = [compute_Ck(x_t, -2, 2, k) for k in k_values]
+    from _plot import plot_discrete_signal
 
-# 获取逼近函数
-approx, coeffs = approximate_function(target_function, T0, N)
+    plot_discrete_signal(
+        k_values,
+        [C.real for C in C_values],
+        title='C_k vs. k',
+        xlabel='k',
+        ylabel='C_k.real',
+    )
 
-# 绘制原函数和逼近函数
-x = np.linspace(0, 2 * np.pi, 1000)
-y_original = target_function(x)
-y_approx = [approx(t) for t in x]
-
-plt.figure(figsize=(10, 6))
-plt.plot(x, y_original, label="Original Function", linewidth=2)
-plt.plot(x, y_approx, label=f"Fourier Approximation (N={N})", linestyle="--")
-plt.title("Function Approximation Using Fourier Series")
-plt.xlabel("x")
-plt.ylabel("f(x)")
-plt.legend()
-plt.grid()
-plt.show()
+    plot_discrete_signal(
+        k_values,
+        [C.imag for C in C_values],
+        title='C_k vs. k',
+        xlabel='k',
+        ylabel='C_k.imag',
+    )
